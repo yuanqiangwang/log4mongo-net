@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Linq;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MongoDB.Driver.Builders;
 using log4net.Appender;
 using log4net.Core;
 
@@ -32,6 +33,18 @@ namespace Log4Mongo
 		/// Defaults to "logs"
 		/// </summary>
 		public string CollectionName { get; set; }
+
+		/// <summary>
+		/// Maximum number of documents in collection
+		/// See http://docs.mongodb.org/manual/core/capped-collections/
+		/// </summary>
+		public string NewCollectionMaxDocs { get; set; }
+
+		/// <summary>
+		/// Maximum size of collection
+		/// See http://docs.mongodb.org/manual/core/capped-collections/
+		/// </summary>
+		public string NewCollectionMaxSize { get; set; }
 
 		#region Deprecated
 
@@ -90,8 +103,49 @@ namespace Log4Mongo
 		private MongoCollection GetCollection()
 		{
 			var db = GetDatabase();
-			MongoCollection collection = db.GetCollection(CollectionName ?? "logs");
+			var collectionName = CollectionName ?? "logs";
+
+			EnsureCollectionExists(db, collectionName);
+
+			MongoCollection collection = db.GetCollection(collectionName);
 			return collection;
+		}
+
+		private void EnsureCollectionExists(MongoDatabase db, string collectionName)
+		{
+			if (!db.CollectionExists(collectionName))
+			{
+				CreateCollection(db, collectionName);
+			}
+		}
+
+		private void CreateCollection(MongoDatabase db, string collectionName)
+		{
+			var cob = new CollectionOptionsBuilder();
+
+			SetCappedCollectionOptions(cob);
+
+			db.CreateCollection(collectionName, cob);
+		}
+
+		private void SetCappedCollectionOptions(CollectionOptionsBuilder options)
+		{
+			var unitResolver = new UnitResolver();
+
+			var newCollectionMaxSize = unitResolver.Resolve(NewCollectionMaxSize);
+			var newCollectionMaxDocs = unitResolver.Resolve(NewCollectionMaxDocs);
+
+			if (newCollectionMaxSize > 0)
+			{
+				options = options.SetCapped(true)
+						 .SetMaxSize(newCollectionMaxSize);
+
+				if (newCollectionMaxDocs > 0)
+				{
+					options = options.SetCapped(true)
+							 .SetMaxDocuments(newCollectionMaxDocs);
+				}
+			}
 		}
 
 		private string GetConnectionString()
