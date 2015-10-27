@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;
+using System.Threading.Tasks;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using log4net.Appender;
@@ -37,6 +38,18 @@ namespace Log4Mongo
         /// If set, create a TTL index to expire after specified number of seconds
         /// </summary>
         public long ExpireAfterSeconds { get; set; }
+
+		/// <summary>
+		/// Maximum number of documents in collection
+		/// See http://docs.mongodb.org/manual/core/capped-collections/
+		/// </summary>
+		public string NewCollectionMaxDocs { get; set; }
+
+		/// <summary>
+		/// Maximum size of collection
+		/// See http://docs.mongodb.org/manual/core/capped-collections/
+		/// </summary>
+		public string NewCollectionMaxSize { get; set; }
 
 		#region Deprecated
 
@@ -96,9 +109,59 @@ namespace Log4Mongo
 
 		private IMongoCollection<BsonDocument> GetCollection()
 		{
-			var db = GetDatabase();
-			IMongoCollection<BsonDocument> collection = db.GetCollection<BsonDocument>(CollectionName ?? "logs");
+			IMongoDatabase db = GetDatabase();
+			var collectionName = CollectionName ?? "logs";
+			EnsureCollectionExists(db, collectionName);
+            IMongoCollection<BsonDocument> collection = db.GetCollection<BsonDocument>(collectionName);
+            
 			return collection;
+		}
+
+		private void EnsureCollectionExists(IMongoDatabase db, string collectionName)
+		{
+		    var result = CollectionExistsAsync(db, collectionName).Result;
+		    if (!result)
+			{
+				CreateCollection(db, collectionName);
+			}
+		}
+
+        public Task<bool> CollectionExistsAsync(IMongoDatabase db, string collectionName)
+        {
+            var filter = new BsonDocument("name", collectionName);
+            return db.ListCollectionsAsync(new ListCollectionsOptions {Filter = filter})
+                .ContinueWith(t =>
+                {
+                    return t.Result.ToListAsync()
+                        .ContinueWith(t2 => t2.Result.Any());
+                }).Unwrap();
+        }
+
+        private void CreateCollection(IMongoDatabase db, string collectionName)
+        {
+            var cob = new CreateCollectionOptions();
+            SetCappedCollectionOptions(cob);
+            db.CreateCollectionAsync(collectionName, cob).GetAwaiter().GetResult();
+		}
+
+		private void SetCappedCollectionOptions(CreateCollectionOptions options)
+		{
+			var unitResolver = new UnitResolver();
+
+			var newCollectionMaxSize = unitResolver.Resolve(NewCollectionMaxSize);
+			var newCollectionMaxDocs = unitResolver.Resolve(NewCollectionMaxDocs);
+
+			if (newCollectionMaxSize > 0)
+			{
+				options.Capped = true;
+                options.MaxSize = newCollectionMaxSize;
+
+				if (newCollectionMaxDocs > 0)
+				{
+					options.Capped = true;
+				    options.MaxDocuments = newCollectionMaxDocs;
+				}
+			}
 		}
 
 		private string GetConnectionString()

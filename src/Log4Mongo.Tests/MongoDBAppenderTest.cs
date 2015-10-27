@@ -450,5 +450,156 @@ namespace Log4Mongo.Tests
 			var oneSecondAgo = now.AddSeconds(-1);
 			doc.GetElement("timestamp").Value.AsDateTime.Should().Be.IncludedIn(oneSecondAgo, now);
 		}
+
+		[Test]
+		public void Should_not_create_capped_collection()
+		{
+			var target = GetConfiguredLog();
+
+			target.Info("a log");
+
+		    var stats = GetCollectionStats(_collection.Database, "logs");
+            stats["capped"].AsBoolean.Should().Be(false);
+		}
+
+		[Test]
+		public void Should_create_capped_collection()
+		{
+			XmlConfigurator.Configure(new MemoryStream(Encoding.UTF8.GetBytes(@"
+<log4net>
+	<appender name='MongoDBAppender' type='Log4Mongo.MongoDBAppender, Log4Mongo'>
+		<connectionString value='mongodb://localhost' />
+		<newCollectionMaxSize value='65536' />
+		<newCollectionMaxDocs value='5000' />
+	</appender>
+	<root>
+		<level value='ALL' />
+		<appender-ref ref='MongoDBAppender' />
+	</root>
+</log4net>
+")));
+			var target = LogManager.GetLogger("Test");
+
+			target.Info("a log");
+
+            var stats = GetCollectionStats(_collection.Database, "logs");
+            stats["capped"].AsBoolean.Should().Be(true);
+            
+//			stats.StorageSize.Should().Be(65536);
+//			stats.MaxDocuments.Should().Be(5000);
+		}
+
+        [Test]
+        public void Should_create_capped_collection_when_only_size_is_specified()
+        {
+            XmlConfigurator.Configure(new MemoryStream(Encoding.UTF8.GetBytes(@"
+<log4net>
+	<appender name='MongoDBAppender' type='Log4Mongo.MongoDBAppender, Log4Mongo'>
+		<connectionString value='mongodb://localhost' />
+		<newCollectionMaxSize value='65536' />
+	</appender>
+	<root>
+		<level value='ALL' />
+		<appender-ref ref='MongoDBAppender' />
+	</root>
+</log4net>
+")));
+            var target = LogManager.GetLogger("Test");
+
+            target.Info("a log");
+
+            var stats = GetCollectionStats(_collection.Database, "logs");
+            stats["capped"].AsBoolean.Should().Be(true);
+            stats["storageSize"].AsInt32.Should().Be(65536);
+        }
+
+		[TestCase("4096", 4096, "1k", 1000)]
+		[TestCase("10MB", 10485760, "1000", 1000)]
+		[TestCase("5MB", 5242880, "3k", 3000)]
+		public void Should_accept_units_in_collection_cap_values(string maxSizeString, int maxSize, string maxDocsString, int maxDocs)
+		{
+			XmlConfigurator.Configure(new MemoryStream(Encoding.UTF8.GetBytes(string.Format(@"
+<log4net>
+	<appender name='MongoDBAppender' type='Log4Mongo.MongoDBAppender, Log4Mongo'>
+		<connectionString value='mongodb://localhost' />
+		<newCollectionMaxSize value='{1}' />
+		<newCollectionMaxDocs value='{0}' />
+	</appender>
+	<root>
+		<level value='ALL' />
+		<appender-ref ref='MongoDBAppender' />
+	</root>
+</log4net>
+", maxDocsString, maxSizeString))));
+			var target = LogManager.GetLogger("Test");
+
+			target.Info("a log");
+
+            var stats = GetCollectionStats(_collection.Database, "logs");
+            stats["capped"].AsBoolean.Should().Be(true);
+            stats["storageSize"].AsInt32.Should().Be(maxSize);
+			stats["max"].AsInt32 .Should().Be(maxDocs);
+		}
+
+        [TestCase("4096", 4096, "0", -1)]
+        public void If_no_value_is_specified_should_return_max_value(string maxSizeString, int maxSize, string maxDocsString, int maxDocs)
+        {
+            XmlConfigurator.Configure(new MemoryStream(Encoding.UTF8.GetBytes(string.Format(@"
+<log4net>
+	<appender name='MongoDBAppender' type='Log4Mongo.MongoDBAppender, Log4Mongo'>
+		<connectionString value='mongodb://localhost' />
+		<newCollectionMaxSize value='{1}' />
+		<newCollectionMaxDocs value='{0}' />
+	</appender>
+	<root>
+		<level value='ALL' />
+		<appender-ref ref='MongoDBAppender' />
+	</root>
+</log4net>
+", maxDocsString, maxSizeString))));
+            var target = LogManager.GetLogger("Test");
+
+            target.Info("a log");
+
+            var stats = GetCollectionStats(_collection.Database, "logs");
+            stats["capped"].AsBoolean.Should().Be(true);
+            stats["storageSize"].AsInt32.Should().Be(maxSize);
+            Convert.ToInt64(stats["max"]).Should().Be(Int64.MaxValue);
+        }
+
+        [Test]
+		public void Should_not_cap_collection_when_units_invalid()
+		{
+			XmlConfigurator.Configure(new MemoryStream(Encoding.UTF8.GetBytes(@"
+<log4net>
+	<appender name='MongoDBAppender' type='Log4Mongo.MongoDBAppender, Log4Mongo'>
+		<connectionString value='mongodb://localhost' />
+		<newCollectionMaxSize value='12g' />
+	</appender>
+	<root>
+		<level value='ALL' />
+		<appender-ref ref='MongoDBAppender' />
+	</root>
+</log4net>
+")));
+			var target = LogManager.GetLogger("Test");
+
+			target.Info("a log");
+
+            var stats = GetCollectionStats(_collection.Database, "logs");
+            stats["capped"].AsBoolean.Should().Be(false);
+		}
+
+
+	    private BsonDocument GetCollectionStats(IMongoDatabase db, string collectionName)
+	    {
+            var command = new BsonDocumentCommand<BsonDocument>(new BsonDocument
+            {
+                {"collstats", collectionName}
+            });
+
+            BsonDocument stats = db.RunCommandAsync(command).Result;
+	        return stats;
+	    }
 	}
 }
