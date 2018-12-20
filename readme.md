@@ -1,20 +1,10 @@
-MongoDB appender for log4net
+# MongoDB appender for log4net
 ----------------------------
 
-The title says it all. Check [Log4Net site](http://logging.apache.org/log4net/) or [MongoDB site](http://www.mongodb.org/) if you need more info.
-
-This is the official .NET implementation for the [log4mongo](http://log4mongo.org) project
-
-To get started, check out [@sammleach](https://twitter.com/sammleach) blog post: [.NET Logging with log4mongo-net](http://samlea.ch/dev/log4mongo-net/)
-
-Installation
-------------
-
-[Get it on NuGet](https://nuget.org/packages/log4mongo-net), or download sources and run build.cmd to build
-
-Appender configuration sample
+## Appender configuration sample
 -----------------------------
 
+```
 	<appender name="MongoDBAppender" type="Log4Mongo.MongoDBAppender, Log4Mongo">
 		<!-- 
 		MongoDB database connection in the format:
@@ -43,13 +33,9 @@ Appender configuration sample
 		Optional, Defaults to "logs"
 		-->
 		<collectionName value="logs" />
-
-		<!--
-		Maximum size of newly created collection. Optional, Defaults to creating uncapped collections
-		-->
+		<!--Maximum size of newly created collection. Optional, Defaults to creating uncapped collections-->
 		<newCollectionMaxSize value='65536' />
 		<newCollectionMaxDocs value='5000' />
-		
 		<field>
 			<!-- Note: this needs to be "timestamp" and NOT "Timestamp"  for the TTL index to work -->
 			<name value="timestamp" />
@@ -78,15 +64,31 @@ Appender configuration sample
 			</layout>
 		</field>
 	</appender>
+```
+
+## NetFrameWork
+			LogLog.InternalDebugging = true;
+			XmlConfigurator.Configure();//app.config default 
+
+			ILog log = LogManager.GetLogger(typeof(Program));
+			log.Info("Starting");
+			
+## NETCORE
+```
+        public static ILoggerRepository Repository;
+```
+
+```
+            Repository = log4net.LogManager.CreateRepository("netcorerepository");
+            XmlConfigurator.Configure(Repository, new FileInfo("log4net.config"));
+
+
+            ILog log = LogManager.GetLogger(Repository.Name,typeof(Program));
+            log.Info("Starting");
+```
+
 
 License
 -------
 
 [BSD 3](https://raw.github.com/log4mongo/log4mongo-net/master/LICENSE)
-
-Credits
--------
-
-Thanks to [JetBrains](http://www.jetbrains.com/) for providing us licenses for its excellent tool [ReSharper](http://www.jetbrains.com/resharper/)
-
-![ReSharper](http://www.jetbrains.com/img/logos/logo_resharper_small.gif)
