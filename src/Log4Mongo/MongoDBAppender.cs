@@ -263,13 +263,15 @@ namespace Log4Mongo
         private void CreateExpiryAfterIndex(IMongoCollection<BsonDocument> collection)
         {
             if (ExpireAfterSeconds <= 0) return;
-            collection.Indexes.CreateOneAsync(
-                Builders<BsonDocument>.IndexKeys.Ascending("timestamp"),
-                new CreateIndexOptions()
-                {
-                    Name = "expireAfterSecondsIndex",
-                    ExpireAfter = new TimeSpan(ExpireAfterSeconds * TimeSpan.TicksPerSecond)
-                });
+            var keys = Builders<BsonDocument>.IndexKeys.Ascending("timestamp");
+            var options = new CreateIndexOptions()
+            {
+                Name = "expireAfterSecondsIndex",
+                ExpireAfter = new TimeSpan(ExpireAfterSeconds * TimeSpan.TicksPerSecond)
+            };
+            CreateIndexModel<BsonDocument> indexModel = new CreateIndexModel<BsonDocument>(keys, options);
+            
+            collection.Indexes.CreateOneAsync(indexModel);
         }
     }
 }
